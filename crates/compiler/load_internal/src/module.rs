@@ -46,6 +46,7 @@ pub struct LoadedModule {
     pub timings: MutMap<ModuleId, ModuleTiming>,
     pub docs_by_module: VecMap<ModuleId, ModuleDocumentation>,
     pub abilities_store: AbilitiesStore,
+    pub typechecked: MutMap<ModuleId, CheckedModule>,
 }
 
 impl LoadedModule {
@@ -128,6 +129,13 @@ pub struct TypeCheckedModule<'a> {
 
     #[cfg(debug_assertions)]
     pub checkmate: Option<roc_checkmate::Collector>,
+}
+
+#[derive(Debug)]
+pub struct CheckedModule {
+    pub solved_subs: Solved<Subs>,
+    pub decls: Declarations,
+    pub abilities_store: AbilitiesStore,
 }
 
 #[derive(Debug)]
