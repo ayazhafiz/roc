@@ -1122,32 +1122,7 @@ impl<'a> LoadStart<'a> {
             );
 
             match res_loaded {
-                Ok(header_output) => {
-                    if let Msg::Header(ModuleHeader {
-                        module_id: header_id,
-                        header_type,
-                        is_root_module,
-                        ..
-                    }) = &header_output.msg
-                    {
-                        debug_assert_eq!(*header_id, header_output.module_id);
-                        debug_assert!(is_root_module);
-
-                        if let HeaderType::Interface { name, .. } = header_type {
-                            // Interface modules can have names like Foo.Bar.Baz,
-                            // in which case we need to adjust the src_dir to
-                            // remove the "Bar/Baz" directories in order to correctly
-                            // resolve this interface module's imports!
-                            let dirs_to_pop = name.as_str().matches('.').count();
-
-                            for _ in 0..dirs_to_pop {
-                                src_dir.pop();
-                            }
-                        }
-                    }
-
-                    header_output
-                }
+                Ok(header_output) => adjust_header_paths(header_output, &mut src_dir),
 
                 Err(problem) => {
                     let module_ids = Arc::try_unwrap(arc_modules)
@@ -1181,7 +1156,7 @@ impl<'a> LoadStart<'a> {
         filename: PathBuf,
         src: &'a str,
         roc_cache_dir: RocCacheDir<'_>,
-        src_dir: PathBuf,
+        mut src_dir: PathBuf,
     ) -> Result<Self, LoadingProblem<'a>> {
         let arc_modules = Arc::new(Mutex::new(PackageModuleIds::default()));
         let root_exposed_ident_ids = IdentIds::exposed_builtins(0);
@@ -1195,7 +1170,7 @@ impl<'a> LoadStart<'a> {
         } = {
             let root_start_time = Instant::now();
 
-            load_from_str(
+            let header_output = load_from_str(
                 arena,
                 filename,
                 src,
@@ -1203,7 +1178,9 @@ impl<'a> LoadStart<'a> {
                 Arc::clone(&ident_ids_by_module),
                 roc_cache_dir,
                 root_start_time,
-            )?
+            )?;
+
+            adjust_header_paths(header_output, &mut src_dir)
         };
 
         Ok(LoadStart {
@@ -1215,6 +1192,34 @@ impl<'a> LoadStart<'a> {
             opt_platform_shorthand: opt_platform_id,
         })
     }
+}
+
+fn adjust_header_paths<'a>(
+    header_output: HeaderOutput<'a>,
+    src_dir: &mut PathBuf,
+) -> HeaderOutput<'a> {
+    if let Msg::Header(ModuleHeader {
+        module_id: header_id,
+        header_type,
+        ..
+    }) = &header_output.msg
+    {
+        debug_assert_eq!(*header_id, header_output.module_id);
+
+        if let HeaderType::Interface { name, .. } = header_type {
+            // Interface modules can have names like Foo.Bar.Baz,
+            // in which case we need to adjust the src_dir to
+            // remove the "Bar/Baz" directories in order to correctly
+            // resolve this interface module's imports!
+            let dirs_to_pop = name.as_str().matches('.').count();
+
+            for _ in 0..dirs_to_pop {
+                src_dir.pop();
+            }
+        }
+    }
+
+    header_output
 }
 
 pub enum LoadResult<'a> {
